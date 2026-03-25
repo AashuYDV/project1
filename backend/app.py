@@ -342,7 +342,7 @@ RESUME TEXT:
 
 def parse_resume_with_openai(text: str) -> dict:
     resp = oai.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system",  "content": "You are a precise resume parser. Return only valid JSON."},
             {"role": "user",    "content": RESUME_PARSE_PROMPT.format(resume_text=text[:6000])},
@@ -350,7 +350,17 @@ def parse_resume_with_openai(text: str) -> dict:
         temperature=0,
         response_format={"type": "json_object"},
     )
-    return json.loads(resp.choices[0].message.content)
+    raw = resp.choices[0].message.content
+    # Strip whitespace, markdown fences, anything before first {
+    raw = raw.strip()
+    if '```' in raw:
+        raw = re.sub(r'```(?:json)?', '', raw).strip()
+    # Find the actual JSON object
+    start = raw.find('{')
+    end   = raw.rfind('}')
+    if start != -1 and end != -1:
+        raw = raw[start:end+1]
+    return json.loads(raw)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
