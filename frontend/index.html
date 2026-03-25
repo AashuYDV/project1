@@ -5744,7 +5744,7 @@ renderJobs();
    LEAP API LAYER — wires every screen to Flask backend
 ═══════════════════════════════════════════════════════ */
 var API_BASE = (window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1')
-  ? 'http://localhost:5000' : '';
+  ? 'http://localhost:5000' : 'https://leap-backend-zd4j.onrender.com';
 
 window._sessionId = localStorage.getItem('leap_session') || null;
 window._realJobs  = [];
