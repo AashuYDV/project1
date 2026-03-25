@@ -4472,9 +4472,6 @@ function resetResumeScreen() {
   if (orDiv)          orDiv.style.display           = 'flex';
   if (manualBtn)      { manualBtn.style.display = 'block'; manualBtn.textContent = '\u270f\ufe0f\u00a0\u00a0Fill details manually'; }
   if (manualForm)     manualForm.classList.remove('open');
-
-  /* ── Real API call ── */
-  window._uploadFileForParsing(file, progressFill);
   if (skipBtn)        skipBtn.style.display          = 'block';
   if (progressFill)   progressFill.style.width       = '0';
 
@@ -4813,7 +4810,7 @@ function updateVisaScoreDisplay(score) {
       var dot = document.querySelector('.vup-nudge-dot');
       if (dot) dot.style.background = 'var(--success)';
     } else if (gap <= 10) {
-      nudgeText.innerHTML = 'A sponsor offer adds <strong>+20 pts</strong> — you'd qualify immediately';
+      nudgeText.innerHTML = "A sponsor offer adds <strong>+20 pts</strong> &#8212; you'll qualify immediately";
     } else {
       nudgeText.innerHTML = 'Securing a sponsor offer adds <strong>+20 pts</strong> and clears the threshold';
     }
@@ -5880,7 +5877,7 @@ function _populateJobCards(jobs) {
   preview.innerHTML = top.map(function(j) {
     var gbp=j.salary_gbp||0, inr=gbp?(' · ~₹'+Math.round(gbp*105/100000)+'L'):'';
     var logo=(j.company||'').slice(0,4).toUpperCase();
-    return '<div class="acc-job-card" onclick="_openJob(''+j._id+'')">'+
+    return '<div class="acc-job-card" onclick="_openJob(\'' + j._id + '\')">'+
       '<div class="acc-job-top">'+
         '<div class="acc-job-logo acc-job-logo-text">'+logo+'</div>'+
         '<div class="acc-job-body"><div class="acc-job-role">'+(j.title||'Role')+'</div><div class="acc-job-co">'+(j.company||'Co')+'</div></div>'+
