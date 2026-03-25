@@ -23,8 +23,8 @@ from openai import OpenAI
 import PyPDF2, docx
 
 # ── config ────────────────────────────────────────────────────────────────────
-MONGO_URI   = os.getenv("MONGO_URI","your-mongo-uri-here")
-OPENAI_KEY  = os.getenv("OPENAI_KEY", "your-openai-key-here")
+MONGO_URI   = os.getenv("MONGO_URI", "")
+OPENAI_KEY  = os.getenv("OPENAI_KEY", "")
 DB_NAME     = "UK_job"
 COLLECTION  = "Job_data"
 PORT        = int(os.getenv("PORT", 5000))
@@ -342,25 +342,27 @@ RESUME TEXT:
 
 def parse_resume_with_openai(text: str) -> dict:
     resp = oai.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         messages=[
-            {"role": "system",  "content": "You are a precise resume parser. Return only valid JSON."},
+            {"role": "system",  "content": "You are a precise resume parser. Return only valid JSON with no extra text."},
             {"role": "user",    "content": RESUME_PARSE_PROMPT.format(resume_text=text[:6000])},
         ],
         temperature=0,
         response_format={"type": "json_object"},
     )
-    raw = resp.choices[0].message.content
-    # Strip whitespace, markdown fences, anything before first {
+    raw = resp.choices[0].message.content or ""
     raw = raw.strip()
-    if '```' in raw:
-        raw = re.sub(r'```(?:json)?', '', raw).strip()
-    # Find the actual JSON object
-    start = raw.find('{')
-    end   = raw.rfind('}')
+    # Strip markdown code fences if present
+    raw = re.sub(r"```(?:json)?", "", raw).strip()
+    # Extract first valid JSON object
+    start = raw.find("{")
+    end   = raw.rfind("}")
     if start != -1 and end != -1:
         raw = raw[start:end+1]
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Could not parse OpenAI response as JSON: {e}\nRaw: {raw[:200]}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -562,7 +564,8 @@ def parse_resume():
     try:
         profile = parse_resume_with_openai(raw_text)
     except Exception as e:
-        return jresp({"error": f"Resume parsing failed: {e}"}, 500)
+        print(f"Resume parsing error: {e}")
+        return jresp({"error": f"Resume parsing failed. Please try again or fill details manually."}, 500)
 
     # Merge mad-lib answers
     if sid and sid in SESSIONS:
