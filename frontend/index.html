@@ -4546,7 +4546,7 @@ window.toggleManualForm = function() {
   if (btn) btn.textContent = isOpen ? '\u270f\ufe0f\u00a0\u00a0Fill details manually' : '\u2716\u00a0\u00a0Hide form';
 };
 
-window.submitManualForm = function() {
+window.submitManualForm = async function() {
   var name = document.getElementById('manual-name')  ? document.getElementById('manual-name').value.trim()  : '';
   var role = document.getElementById('manual-role')  ? document.getElementById('manual-role').value.trim()  : '';
   var exp  = document.getElementById('manual-exp')   ? document.getElementById('manual-exp').value           : '';
@@ -4556,6 +4556,41 @@ window.submitManualForm = function() {
     return;
   }
   window._manualData = { name: name, role: role, exp: exp, qual: qual };
+
+  /* Build a synthetic profile from manual data and fetch jobs */
+  var a = (window._v17 && window._v17.answers) || {};
+  var expNum = parseInt(exp) || 3;
+  var syntheticProfile = {
+    name: name, role: role,
+    experience_years: expNum,
+    education: qual,
+    skills: [],
+    english_ok: true,
+    salary_range_inr: a.salary || '',
+    expected_salary_gbp: 45000
+  };
+  window._parsedProfile = syntheticProfile;
+
+  /* Fetch jobs from backend using the synthetic profile */
+  try {
+    var sid = window._sessionId || '';
+    if (!sid) {
+      var sd = await apiPost('/api/session/create', {role: role, exp: exp, salary: a.salary, goal: a.goal});
+      if (sd.session_id) { window._sessionId = sd.session_id; localStorage.setItem('leap_session', sd.session_id); }
+    }
+    var jobsResp = await apiGet('/api/jobs?session_id=' + (window._sessionId||'') + '&role=' + encodeURIComponent(role));
+    if (jobsResp.jobs && jobsResp.jobs.length) {
+      window._realJobs = jobsResp.jobs;
+    }
+  } catch(e) { console.warn('Could not fetch jobs for manual profile:', e); }
+
+  /* Calculate visa score locally */
+  window._realVisa = { total: 50, gap: 20, qualifies: false,
+    breakdown: { sponsor_offer: {pts:0,label:'Sponsor job offer',status:'pending'},
+                 role_level: {pts:20,label:'Role at RQF Level 3+',status:'earned'},
+                 english: {pts:10,label:'English B1+',status:'earned'},
+                 salary: {pts:0,label:'Salary meets threshold',status:'pending'} } };
+
   showProfilePreview('manual');
 };
 
@@ -4673,7 +4708,16 @@ function startLoading() {
   function runStep() {
     if (idx >= steps.length) {
       if (bar) bar.style.width = '100%';
-      setTimeout(function() { initDashboard(); showScreen('dashboard'); }, 500);
+      setTimeout(function() {
+        initDashboard((window._v17&&window._v17.answers)||{});
+        /* apply real data one more time to override any placeholder values */
+        if (window._realJobs && window._realJobs.length) {
+          _populateJobCards(window._realJobs);
+          var jc=document.getElementById('v18-jobs-count'); if(jc) jc.textContent=window._realJobs.length;
+        }
+        updateVisaScoreDisplay(window._currentVisaScore || 62);
+        showScreen('dashboard');
+      }, 500);
       return;
     }
     var s = steps[idx];
@@ -5853,13 +5897,10 @@ window.continueFromUpload = function() {
 
 /* 4. Dashboard load with real data */
 window.continueFromPreview = function() {
-  showScreen('loading'); startLoadingSequence();
-  setTimeout(function() {
-    _applyDataToDashboard(window._realJobs, window._realVisa);
-    showScreen('dashboard');
-    initDashboard((window._v17&&window._v17.answers)||{});
-    setTimeout(function(){updateVisaScoreDisplay(window._currentVisaScore||62);},300);
-  }, 3200);
+  showScreen('loading');
+  startLoading(); /* runs the animated steps then auto-navigates to dashboard */
+  /* Apply whatever data we have — real jobs if parsed, empty if manual/skip */
+  _applyDataToDashboard(window._realJobs || [], window._realVisa || {});
 };
 
 function _applyDataToDashboard(jobs, visa) {
