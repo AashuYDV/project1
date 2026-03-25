@@ -344,7 +344,7 @@ def parse_resume_with_openai(text: str) -> dict:
     resp = oai.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system",  "content": "You are a precise resume parser. Return only valid JSON with no extra text."},
+            {"role": "system",  "content": "You are a resume parser. Return ONLY a valid JSON object. No markdown, no code fences, no explanation. Just the raw JSON."},
             {"role": "user",    "content": RESUME_PARSE_PROMPT.format(resume_text=text[:6000])},
         ],
         temperature=0,
@@ -352,17 +352,29 @@ def parse_resume_with_openai(text: str) -> dict:
     )
     raw = resp.choices[0].message.content or ""
     raw = raw.strip()
-    # Strip markdown code fences if present
-    raw = re.sub(r"```(?:json)?", "", raw).strip()
-    # Extract first valid JSON object
+    # Strip markdown code fences
+    raw = re.sub(r"```(?:json)?\s*", "", raw)
+    raw = re.sub(r"```\s*$", "", raw).strip()
+    # Find the JSON object boundaries
     start = raw.find("{")
     end   = raw.rfind("}")
-    if start != -1 and end != -1:
+    if start != -1 and end != -1 and end > start:
         raw = raw[start:end+1]
+    # Attempt parse
     try:
         return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Could not parse OpenAI response as JSON: {e}\nRaw: {raw[:200]}")
+    except json.JSONDecodeError:
+        # Last resort: ask GPT to fix its own malformed JSON
+        fix_resp = oai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Fix this malformed JSON and return only valid JSON, nothing else."},
+                {"role": "user",   "content": raw[:2000]},
+            ],
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        return json.loads(fix_resp.choices[0].message.content)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -564,8 +576,8 @@ def parse_resume():
     try:
         profile = parse_resume_with_openai(raw_text)
     except Exception as e:
-        print(f"Resume parsing error: {e}")
-        return jresp({"error": f"Resume parsing failed. Please try again or fill details manually."}, 500)
+        print(f"[PARSE ERROR] {type(e).__name__}: {e}")
+        return jresp({"error": "Resume parsing failed. Please fill details manually."}, 500)
 
     # Merge mad-lib answers
     if sid and sid in SESSIONS:
